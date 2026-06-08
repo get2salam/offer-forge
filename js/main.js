@@ -216,11 +216,18 @@ function formatDate(value) {
 }
 
 function escapeHtml(value) {
-  return String(value || '')
+  if (value === null || value === undefined) return '';
+  return String(value)
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+function safeId(value) {
+  return typeof value === 'string' && SAFE_ID.test(value) ? value : uid();
 }
 
 function clamp(value, min, max) {
@@ -243,19 +250,30 @@ function toneForDate(item) {
   return 'success';
 }
 
+function safeString(value, fallback, max = 280) {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.slice(0, max);
+  return trimmed.length ? trimmed : fallback;
+}
+
+function safeDate(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : todayISO(3);
+}
+
 function normalize(item = {}) {
+  const source = item && typeof item === 'object' ? item : {};
   return {
-    id: item.id || uid(),
-    title: item.title || `New ${SPEC.itemLabel}`,
-    note: item.note || SPEC.defaults.note,
-    category: SPEC.categories.includes(item.category) ? item.category : SPEC.categories[0],
-    state: SPEC.states.includes(item.state) ? item.state : SPEC.states[0],
-    score: clamp(item.score ?? 7, 1, 10),
-    effort: clamp(item.effort ?? 3, 1, 10),
-    metric: clamp(item.metric ?? SPEC.metric.default ?? 6, SPEC.metric.min, SPEC.metric.max),
-    textOne: item.textOne || SPEC.textOne.default,
-    textTwo: item.textTwo || SPEC.textTwo.default,
-    date: item.date || todayISO(3),
+    id: safeId(source.id),
+    title: safeString(source.title, `New ${SPEC.itemLabel}`),
+    note: safeString(source.note, SPEC.defaults.note, 1000),
+    category: SPEC.categories.includes(source.category) ? source.category : SPEC.categories[0],
+    state: SPEC.states.includes(source.state) ? source.state : SPEC.states[0],
+    score: clamp(source.score ?? 7, 1, 10),
+    effort: clamp(source.effort ?? 3, 1, 10),
+    metric: clamp(source.metric ?? SPEC.metric.default ?? 6, SPEC.metric.min, SPEC.metric.max),
+    textOne: safeString(source.textOne, SPEC.textOne.default),
+    textTwo: safeString(source.textTwo, SPEC.textTwo.default),
+    date: safeDate(source.date),
   };
 }
 
@@ -274,17 +292,33 @@ function seedState() {
   };
 }
 
+const MAX_IMPORT_ITEMS = 500;
+
+function mergeImported(parsed) {
+  const base = seedState();
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return base;
+  const rawItems = Array.isArray(parsed.items) ? parsed.items.slice(0, MAX_IMPORT_ITEMS) : [];
+  const rawUi = parsed.ui && typeof parsed.ui === 'object' && !Array.isArray(parsed.ui) ? parsed.ui : {};
+  return {
+    ...base,
+    boardTitle: safeString(parsed.boardTitle, base.boardTitle, 120),
+    boardSubtitle: safeString(parsed.boardSubtitle, base.boardSubtitle, 240),
+    items: rawItems.map((item) => normalize(item)),
+    ui: {
+      ...base.ui,
+      search: typeof rawUi.search === 'string' ? rawUi.search.slice(0, 200) : base.ui.search,
+      category: SPEC.categories.includes(rawUi.category) ? rawUi.category : base.ui.category,
+      status: SPEC.states.includes(rawUi.status) ? rawUi.status : base.ui.status,
+      selectedId: typeof rawUi.selectedId === 'string' && SAFE_ID.test(rawUi.selectedId) ? rawUi.selectedId : null,
+    },
+  };
+}
+
 function hydrate() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return seedState();
-    const parsed = JSON.parse(raw);
-    return {
-      ...seedState(),
-      ...parsed,
-      items: (parsed.items || []).map((item) => normalize(item)),
-      ui: { ...seedState().ui, ...(parsed.ui || {}) },
-    };
+    return mergeImported(JSON.parse(raw));
   } catch (error) {
     console.warn('Falling back to seed state', error);
     return seedState();
@@ -371,12 +405,7 @@ function exportState() {
 async function importState(file) {
   const raw = await file.text();
   const parsed = JSON.parse(raw);
-  commit({
-    ...seedState(),
-    ...parsed,
-    items: (parsed.items || []).map((item) => normalize(item)),
-    ui: { ...seedState().ui, ...(parsed.ui || {}) },
-  });
+  commit(mergeImported(parsed));
   showToast('Imported backup.');
 }
 
@@ -460,9 +489,9 @@ function renderInsights(items) {
   ];
   refs.insights.innerHTML = cards.map((card) => `
     <article class="card insight-card">
-      <p class="eyebrow">${card.label}</p>
-      <h3>${card.title}</h3>
-      <p>${card.body}</p>
+      <p class="eyebrow">${escapeHtml(card.label)}</p>
+      <h3>${escapeHtml(card.title)}</h3>
+      <p>${escapeHtml(card.body)}</p>
     </article>
   `).join('');
 }
@@ -479,21 +508,21 @@ function renderList(items) {
   }
 
   refs.list.innerHTML = items.map((item) => `
-    <button class="item ${item.id === state.ui.selectedId ? 'is-selected' : ''}" type="button" data-id="${item.id}">
+    <button class="item ${item.id === state.ui.selectedId ? 'is-selected' : ''}" type="button" data-id="${escapeHtml(item.id)}">
       <div class="item-top">
-        <strong>${item.title}</strong>
+        <strong>${escapeHtml(item.title)}</strong>
         <span class="score">${priority(item)}</span>
       </div>
-      <p>${item.note}</p>
+      <p>${escapeHtml(item.note)}</p>
       <div class="badge-row">
         <span class="pill ${toneForDate(item)}">${formatDate(item.date)}</span>
-        <span class="pill">${item.textOne}</span>
-        <span class="pill">${SPEC.metric.label} ${item.metric}/${SPEC.metric.max}</span>
+        <span class="pill">${escapeHtml(item.textOne)}</span>
+        <span class="pill">${escapeHtml(SPEC.metric.label)} ${item.metric}/${SPEC.metric.max}</span>
       </div>
       <div class="meta">
-        <span>${item.category}</span>
-        <span>${item.state}</span>
-        <span>${SPEC.textTwo.label}: ${item.textTwo}</span>
+        <span>${escapeHtml(item.category)}</span>
+        <span>${escapeHtml(item.state)}</span>
+        <span>${escapeHtml(SPEC.textTwo.label)}: ${escapeHtml(item.textTwo)}</span>
         <span>Friction ${item.effort}/10</span>
       </div>
     </button>
@@ -514,8 +543,8 @@ function renderEditor(item) {
   refs.editor.innerHTML = `
     <div class="editor-head">
       <div>
-        <p class="eyebrow">${SPEC.editorEyebrow || `${SPEC.itemLabel} editor`}</p>
-        <h3>${item.title}</h3>
+        <p class="eyebrow">${escapeHtml(SPEC.editorEyebrow || `${SPEC.itemLabel} editor`)}</p>
+        <h3>${escapeHtml(item.title)}</h3>
       </div>
       <span class="score">Priority ${priority(item)}</span>
     </div>
@@ -599,12 +628,12 @@ function renderPanels() {
       ${queue.slice(0, 4).map((item) => `
         <div class="mini-card">
           <div class="inline-split">
-            <strong>${item.title}</strong>
+            <strong>${escapeHtml(item.title)}</strong>
             <span class="pill ${toneForDate(item)}">${formatDate(item.date)}</span>
           </div>
-          <p>${item.textOne} · ${item.textTwo} · ${SPEC.metric.label.toLowerCase()} ${item.metric}/${SPEC.metric.max}.</p>
+          <p>${escapeHtml(item.textOne)} · ${escapeHtml(item.textTwo)} · ${escapeHtml(SPEC.metric.label.toLowerCase())} ${item.metric}/${SPEC.metric.max}.</p>
         </div>
-      `).join('') || `<div class="empty"><strong>No pending ${SPEC.itemPluralLabel.toLowerCase()}</strong><p>${SPEC.queue.empty}</p></div>`}
+      `).join('') || `<div class="empty"><strong>No pending ${escapeHtml(SPEC.itemPluralLabel.toLowerCase())}</strong><p>${escapeHtml(SPEC.queue.empty)}</p></div>`}
     </div>
   `;
 
@@ -619,8 +648,8 @@ function renderPanels() {
       <span class="chip">${state.items.length} total</span>
     </div>
     <ul class="metric-list">
-      ${byCategory.map(({ entry, count }) => `<li><span>${entry}</span><strong>${count}</strong></li>`).join('')}
-      <li><span>Strongest ${SPEC.metric.label.toLowerCase()}</span><strong>${strongest}</strong></li>
+      ${byCategory.map(({ entry, count }) => `<li><span>${escapeHtml(entry)}</span><strong>${count}</strong></li>`).join('')}
+      <li><span>Strongest ${escapeHtml(SPEC.metric.label.toLowerCase())}</span><strong>${escapeHtml(strongest)}</strong></li>
     </ul>
   `;
 }
