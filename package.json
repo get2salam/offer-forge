@@ -1,0 +1,11 @@
+{
+  "name": "offer-forge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local-first workspace for shaping productized service offers.",
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/security-smoke.mjs",
+    "verify": "npm test"
+  }
+}

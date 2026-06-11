@@ -31,6 +31,16 @@ python -m http.server 8000
 
 Then open <http://localhost:8000>.
 
+## Local verification
+
+Offer Forge has a dependency-free Node smoke test that loads the browser app in a stubbed DOM and checks the import/render security contract.
+
+```bash
+npm test
+```
+
+GitHub Actions runs the same command on pushes and pull requests so backup-import and XSS regressions are caught before changes land.
+
 ## Keyboard shortcuts
 
 - `N` creates a new offer block
