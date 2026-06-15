@@ -198,20 +198,20 @@ function todayISO(offset = 0) {
 }
 
 function daysFromToday(value) {
-  if (!value) return 999;
+  if (!isValidISODate(value)) return 999;
   const today = new Date(`${todayISO()}T00:00:00`);
   const target = new Date(`${value}T00:00:00`);
   return Math.round((target - today) / 86400000);
 }
 
 function bumpDate(value, days) {
-  const date = new Date(`${value || todayISO()}T00:00:00`);
+  const date = new Date(`${isValidISODate(value) ? value : todayISO()}T00:00:00`);
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
 }
 
 function formatDate(value) {
-  if (!value) return 'No date';
+  if (!isValidISODate(value)) return 'No date';
   return new Date(`${value}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 }
 
@@ -230,8 +230,9 @@ function safeId(value) {
   return typeof value === 'string' && SAFE_ID.test(value) ? value : uid();
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, Number(value)));
+function clamp(value, min, max, fallback = min) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(min, Math.min(max, numeric)) : fallback;
 }
 
 function completedStates() {
@@ -256,8 +257,14 @@ function safeString(value, fallback, max = 280) {
   return trimmed.length ? trimmed : fallback;
 }
 
+function isValidISODate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 function safeDate(value) {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : todayISO(3);
+  return isValidISODate(value) ? value : todayISO(3);
 }
 
 function normalize(item = {}) {
@@ -268,9 +275,9 @@ function normalize(item = {}) {
     note: safeString(source.note, SPEC.defaults.note, 1000),
     category: SPEC.categories.includes(source.category) ? source.category : SPEC.categories[0],
     state: SPEC.states.includes(source.state) ? source.state : SPEC.states[0],
-    score: clamp(source.score ?? 7, 1, 10),
-    effort: clamp(source.effort ?? 3, 1, 10),
-    metric: clamp(source.metric ?? SPEC.metric.default ?? 6, SPEC.metric.min, SPEC.metric.max),
+    score: clamp(source.score ?? 7, 1, 10, 7),
+    effort: clamp(source.effort ?? 3, 1, 10, 3),
+    metric: clamp(source.metric ?? SPEC.metric.default ?? 6, SPEC.metric.min, SPEC.metric.max, SPEC.metric.default ?? 6),
     textOne: safeString(source.textOne, SPEC.textOne.default),
     textTwo: safeString(source.textTwo, SPEC.textTwo.default),
     date: safeDate(source.date),
@@ -362,7 +369,7 @@ function updateSelected(field, value) {
       const next = { ...item, [field]: value };
       if (['score', 'effort', 'metric'].includes(field)) {
         const bounds = field === 'metric' ? SPEC.metric : { min: 1, max: 10 };
-        next[field] = clamp(value, bounds.min, bounds.max);
+        next[field] = clamp(value, bounds.min, bounds.max, item[field]);
       }
       return next;
     }),

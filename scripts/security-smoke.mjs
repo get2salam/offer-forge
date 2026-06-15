@@ -5,6 +5,7 @@
 //   - normalize strips control over types and lengths
 //   - mergeImported refuses non-object roots and non-array item collections
 //   - rendered list HTML never contains a raw <script> tag from a malicious item
+//   - invalid dates and numeric fields are normalized before priority/render work
 //
 // Run with: node scripts/security-smoke.mjs
 
@@ -66,14 +67,14 @@ const captured = {};
 const exposeTail = `
 ;globalThis.__test = {
   escapeHtml, safeId, safeString, normalize, mergeImported, seedState,
-  renderList, refs, state, commit, SPEC,
+  renderList, refs, state, commit, SPEC, daysFromToday, formatDate, priority,
 };
 `;
 
 runInNewContext(source + exposeTail, sandbox);
 Object.assign(captured, sandbox.__test);
 
-const { escapeHtml, safeId, normalize, mergeImported, seedState, SPEC } = captured;
+const { escapeHtml, safeId, normalize, mergeImported, seedState, SPEC, daysFromToday, formatDate, priority } = captured;
 
 assert.equal(escapeHtml('<script>x</script>'), '&lt;script&gt;x&lt;/script&gt;');
 assert.equal(escapeHtml('"><img onerror=1>'), '&quot;&gt;&lt;img onerror=1&gt;');
@@ -105,6 +106,18 @@ assert.ok(SPEC.states.includes(normalized.state));
 assert.match(normalized.date, /^\d{4}-\d{2}-\d{2}$/);
 assert.ok(normalized.score >= 1 && normalized.score <= 10);
 assert.ok(normalized.effort >= 1 && normalized.effort <= 10);
+
+const invalidNumbers = normalize({ score: 'not-a-number', effort: Number.NaN, metric: Infinity });
+assert.equal(invalidNumbers.score, 7, 'invalid score must use the product default');
+assert.equal(invalidNumbers.effort, 3, 'invalid effort must use the product default');
+assert.equal(invalidNumbers.metric, SPEC.metric.default, 'invalid buyer-fit metric must use the product default');
+assert.ok(Number.isFinite(priority(invalidNumbers)), 'priority must remain finite after numeric normalization');
+
+const invalidDate = normalize({ date: '2026-99-99' });
+assert.notEqual(invalidDate.date, '2026-99-99', 'impossible dates must be replaced');
+assert.match(invalidDate.date, /^\d{4}-\d{2}-\d{2}$/);
+assert.equal(daysFromToday('2026-99-99'), 999, 'invalid dates must sort as unscheduled');
+assert.equal(formatDate('2026-99-99'), 'No date', 'invalid dates must not throw while rendering');
 
 function isSeedShape(value) {
   return value
