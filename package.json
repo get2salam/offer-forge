@@ -5,6 +5,7 @@
   "description": "Local-first workspace for shaping productized service offers.",
   "type": "module",
   "scripts": {
+    "example:brief": "node scripts/review-brief-example.mjs",
     "test": "node scripts/security-smoke.mjs",
     "verify": "npm test"
   }

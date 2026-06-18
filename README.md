@@ -41,6 +41,22 @@ npm test
 
 GitHub Actions runs the same command on pushes and pull requests so backup-import and XSS regressions are caught before changes land.
 
+## Runnable review brief example
+
+Use the example script to see how an exported board can become a concise offer-review brief for a weekly planning ritual. The script ranks active offer blocks with the same buyer-fit, value, friction, status, and review-date signals used by the app, then prints the next block to refine plus a category mix.
+
+```bash
+npm run example:brief
+```
+
+Expected output starts with the top recommendation and the proof asset to prepare:
+
+```text
+# Offer forge board review brief
+Top block: Promise around visible wins (Promise) — priority 101
+Proof to prepare: Before-and-after proof for Busy founders
+```
+
 ## Keyboard shortcuts
 
 - `N` creates a new offer block
