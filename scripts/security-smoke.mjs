@@ -147,4 +147,15 @@ assert.ok(rendered.includes('&lt;script&gt;'), 'script payload must be HTML-esca
 assert.ok(rendered.includes('&lt;img src=x onerror=1&gt;'), 'img payload must be HTML-escaped');
 assert.ok(rendered.includes('&lt;/span&gt;'), 'breakout attempt must be HTML-escaped');
 
+const seeded = seedState();
+sandbox.__test.commit({ ...seeded, ui: { ...seeded.ui, selectedId: seeded.items[0].id } });
+const selectedList = sandbox.__test.refs.list.innerHTML;
+assert.ok(selectedList.includes('aria-current="true"'), 'selected list item must expose current state to assistive tech');
+assert.ok(selectedList.includes('aria-label="Select Promise around visible wins'), 'list item buttons need descriptive accessible labels');
+assert.equal(
+  sandbox.__test.refs.liveStatus.textContent,
+  '3 offer blocks visible. Promise around visible wins selected.',
+  'render should announce visible results and selected offer block',
+);
+
 console.log('security-smoke: OK');

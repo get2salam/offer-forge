@@ -161,6 +161,7 @@ const refs = {
   editor: document.querySelector('[data-role="editor"]'),
   secondaryPrimary: document.querySelector('[data-role="secondary-primary"]'),
   secondarySecondary: document.querySelector('[data-role="secondary-secondary"]'),
+  liveStatus: document.querySelector('[data-role="live-status"]'),
   search: document.querySelector('[data-field="search"]'),
   category: document.querySelector('[data-field="category"]'),
   status: document.querySelector('[data-field="status"]'),
@@ -175,6 +176,7 @@ const toastHost = (() => {
 })();
 
 function showToast(message) {
+  announce(message);
   const node = document.createElement('div');
   node.className = 'toast';
   node.textContent = message;
@@ -184,6 +186,10 @@ function showToast(message) {
     node.classList.remove('is-visible');
     setTimeout(() => node.remove(), 200);
   }, 2200);
+}
+
+function announce(message) {
+  if (refs.liveStatus) refs.liveStatus.textContent = message;
 }
 
 function uid() {
@@ -514,8 +520,11 @@ function renderList(items) {
     return;
   }
 
-  refs.list.innerHTML = items.map((item) => `
-    <button class="item ${item.id === state.ui.selectedId ? 'is-selected' : ''}" type="button" data-id="${escapeHtml(item.id)}">
+  refs.list.innerHTML = items.map((item, index) => {
+    const selected = item.id === state.ui.selectedId;
+    const label = `Select ${item.title}, ${item.category}, ${item.state}, priority ${priority(item)}, ${index + 1} of ${items.length}`;
+    return `
+    <button class="item ${selected ? 'is-selected' : ''}" type="button" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(label)}" ${selected ? 'aria-current="true"' : ''}>
       <div class="item-top">
         <strong>${escapeHtml(item.title)}</strong>
         <span class="score">${priority(item)}</span>
@@ -533,7 +542,16 @@ function renderList(items) {
         <span>Friction ${item.effort}/10</span>
       </div>
     </button>
-  `).join('');
+  `;
+  }).join('');
+}
+
+function announceBoardStatus(items) {
+  const selected = selectedItem();
+  const visibleText = `${items.length} ${items.length === 1 ? SPEC.itemLabel : SPEC.itemPluralLabel.toLowerCase()} visible`;
+  const filterText = [state.ui.category, state.ui.status].filter((value) => value !== 'all').join(', ');
+  const selectedText = selected ? `${selected.title} selected.` : `No ${SPEC.itemLabel} selected.`;
+  announce(`${visibleText}${filterText ? ` for ${filterText}` : ''}. ${selectedText}`);
 }
 
 function renderEditor(item) {
@@ -674,6 +692,7 @@ function render() {
   renderList(items);
   renderEditor(selectedItem());
   renderPanels();
+  announceBoardStatus(items);
 }
 
 document.addEventListener('click', (event) => {
